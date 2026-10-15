@@ -223,7 +223,7 @@ def als_mf(table, factors=32, reg_bias=3.0, reg_factor=10.0, epochs=15, seed=42)
 #     settings (Gibbs sampling) and averages their predictions. The amount of
 #     regularisation is also learned from the data instead of being tuned by hand.
 #
-# (b) Side-information prior (our addition, in the spirit of Porteous et al. 2010).
+# (b) Side-information prior (regression-based prior: Agarwal & Chen 2009, Park et al. 2013).
 #     Plain BPMF pulls every movie's (bias, dials) towards the same average movie.
 #     We pull each movie towards what its genres, release decade and popularity predict,
 #     and each user towards what their rating BEHAVIOUR predicts (which genres they chose
