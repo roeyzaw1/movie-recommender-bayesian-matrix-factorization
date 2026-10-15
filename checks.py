@@ -8,7 +8,10 @@ tiny = np.array([[5.0, nan, 2.0, nan],
                  [4.0, 2.0, nan, nan],
                  [nan, nan, nan, nan]])   # last user and last movie have no ratings at all
 
-small_settings = {'user_knn': {'k': 2}, 'als_mf': {'factors': 2, 'epochs': 3}}
+small_bpmf = {'factors': 2, 'chains': 1, 'burnin': 2, 'samples': 3}
+small_settings = {'user_knn': {'k': 2}, 'als_mf': {'factors': 2, 'epochs': 3}, 'bpmf': small_bpmf,
+                  'blend': {'parts': [{'method': 'bias'}, {'method': 'bpmf', **small_bpmf}],
+                            'weights': [0.5, 0.5]}}
 
 for method in MODELS:
     config = {'method': method, **small_settings.get(method, {})}

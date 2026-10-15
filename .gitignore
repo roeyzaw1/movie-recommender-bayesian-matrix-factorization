@@ -5,4 +5,3 @@ output.npy
 .DS_Store
 ratings_train.npy
 ratings_test.npy
-namesngenre.npy

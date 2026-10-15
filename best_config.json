@@ -1,6 +1,18 @@
 {
-  "method": "als_mf",
-  "factors": 32,
-  "reg_bias": 3.0,
-  "reg_factor": 10.0
+  "method": "blend",
+  "parts": [
+    {
+      "method": "bpmf",
+      "side_info": true
+    },
+    {
+      "method": "user_knn",
+      "k": 30,
+      "damping": 3.0
+    }
+  ],
+  "weights": [
+    0.81,
+    0.195
+  ]
 }

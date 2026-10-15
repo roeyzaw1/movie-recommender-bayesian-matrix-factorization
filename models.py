@@ -18,7 +18,12 @@ Models, from simplest to most complex
 4. bias          : average + "how generous is this user" + "how liked is this movie".
 5. user_knn      : bias, corrected by what similar users thought of the movie.
 6. als_mf        : matrix factorization (hidden "taste dials"), alternating least squares.
+7. bpmf          : Bayesian matrix factorization with side-information priors (main model).
+8. blend         : weighted average of several models.
 """
+import re
+from pathlib import Path
+
 import numpy as np
 
 MIN_RATING, MAX_RATING = 0.5, 5.0
@@ -207,6 +212,160 @@ def als_mf(table, factors=32, reg_bias=3.0, reg_factor=10.0, epochs=15, seed=42)
 
 
 # ---------------------------------------------------------------------------
+# 7. Bayesian matrix factorization with side information (our main model)
+# ---------------------------------------------------------------------------
+# Same prediction as ALS:  mu + b_u + b_i + p_u . q_i
+# Two differences (details in METHOD.md):
+#
+# (a) Bayesian averaging (BPMF, Salakhutdinov & Mnih 2008).
+#     ALS returns ONE best set of dials. With 2 ratings for a movie, many dial settings
+#     fit equally well, so betting on one is risky. BPMF instead draws many plausible
+#     settings (Gibbs sampling) and averages their predictions. The amount of
+#     regularisation is also learned from the data instead of being tuned by hand.
+#
+# (b) Side-information prior (our addition, in the spirit of Porteous et al. 2010).
+#     Plain BPMF pulls every movie's (bias, dials) towards the same average movie.
+#     We pull each movie towards what its genres, release decade and popularity predict,
+#     and each user towards what their rating BEHAVIOUR predicts (which genres they chose
+#     to rate, how many ratings they gave). A movie with 1 rating then starts from
+#     "a typical 1990s comedy" instead of from nothing.
+
+
+def movie_metadata(n_movies):
+    """Genres + release decade for each movie, from namesngenre.npy (or None if unavailable)."""
+    path = Path(__file__).with_name('namesngenre.npy')
+    if not path.exists():
+        return None
+    meta = np.load(path, allow_pickle=True)
+    if len(meta) != n_movies:                       # file does not match this matrix
+        return None
+    genre_lists = [str(g).split('|') for g in meta[:, 1]]
+    names = sorted({g for gs in genre_lists for g in gs})
+    genres = np.array([[name in gs for name in names] for gs in genre_lists], float)
+    years = []
+    for title in meta[:, 0]:
+        found = re.search(r'\((\d{4})\)\s*$', str(title).strip())   # "Toy Story (1995)" -> 1995
+        years.append(float(found.group(1)) if found else np.nan)
+    years = np.array(years)
+    years[np.isnan(years)] = np.nanmedian(years)
+    edges = [-np.inf, 1960, 1970, 1980, 1990, 2000, 2010, np.inf]
+    decades = np.column_stack([(years >= a) & (years < b) for a, b in zip(edges[:-1], edges[1:])]).astype(float)
+    return np.column_stack((genres, decades))
+
+
+def side_features(table, metadata):
+    """Feature rows used to build the priors. First column = 1 (intercept).
+
+    user: genre mix of the movies they rated, log(1 + number of ratings)
+    movie: genres, decade, log(1 + number of ratings)
+    Only uses WHICH cells are rated, never the hidden ones.
+    """
+    rated = observed_mask(table).astype(float)
+    n_user, n_item = rated.sum(axis=1), rated.sum(axis=0)
+    user_f = [np.ones(len(n_user)), np.log1p(n_user)]
+    item_f = [np.ones(len(n_item)), np.log1p(n_item)]
+    if metadata is not None:
+        user_f.append((rated @ metadata) / np.maximum(n_user, 1)[:, None])
+        item_f.append(metadata)
+    return np.column_stack(user_f), np.column_stack(item_f)
+
+
+def _sample_wishart(rng, df, scale):
+    """Random precision matrix from a Wishart distribution (Bartlett decomposition)."""
+    d = scale.shape[0]
+    lower = np.linalg.cholesky(scale)
+    a = np.zeros((d, d))
+    a[np.diag_indices(d)] = np.sqrt(rng.chisquare(df - np.arange(d)))
+    a[np.tril_indices(d, -1)] = rng.standard_normal(d * (d - 1) // 2)
+    la = lower @ a
+    return la @ la.T
+
+
+def _sample_prior(rng, vectors, features):
+    """Prior for each row's [bias, dials]:  centre = features @ W,  spread = precision matrix.
+
+    W: ridge regression of the current vectors on the features ("what do genres predict?").
+    Precision: drawn from its posterior given how far vectors sit from their centres,
+    so the model itself decides how strongly to pull rare movies/users to the centre.
+    """
+    d = vectors.shape[1]
+    W = np.linalg.solve(features.T @ features + np.eye(features.shape[1]), features.T @ vectors)
+    centre = features @ W
+    spread = vectors - centre
+    scale = np.linalg.inv(np.eye(d) + spread.T @ spread)
+    return centre, _sample_wishart(rng, d + len(vectors), (scale + scale.T) / 2)
+
+
+def _sample_side(rng, rated, targets, other, centre, precision, noise_precision):
+    """Draw [bias, dials] for ALL users (or all movies) at once.
+
+    For one user this is Bayesian linear regression: features of movie j = [1, q_j],
+    target = rating - mu - b_j. The posterior is Gaussian with
+        precision  P = precision_prior + noise_precision * sum_j x_j x_j'
+        mean       m = P^-1 (precision_prior @ centre + noise_precision * sum_j x_j * target_j)
+    and we draw one sample from it. Matrix products do the sums for every user together.
+    """
+    x = np.column_stack((np.ones(len(other)), other[:, 1:]))
+    d = x.shape[1]
+    outer = (x[:, :, None] * x[:, None, :]).reshape(len(x), d * d)       # x_j x_j' for each column j
+    xtx = (rated @ outer).reshape(-1, d, d)                              # summed over rated columns
+    xty = targets @ x                                                    # targets are 0 where unrated
+    post_prec = noise_precision * xtx + precision
+    post_mean = np.linalg.solve(post_prec, (noise_precision * xty + centre @ precision)[..., None])[..., 0]
+    chol = np.linalg.cholesky(post_prec)
+    z = rng.standard_normal((len(post_prec), d, 1))
+    return post_mean + np.linalg.solve(np.swapaxes(chol, 1, 2), z)[..., 0]
+
+
+def _bpmf_chain(table, factors, burnin, samples, seed, user_f, item_f):
+    """One Gibbs-sampling run; returns the average prediction over its kept samples."""
+    mask = observed_mask(table)
+    rated = mask.astype(float)
+    mu = table[mask].mean()
+    rng = np.random.default_rng(seed)
+    _, b_u, b_i = fit_biases(table, 3.0)                                 # start from the bias model
+    U = np.column_stack((b_u, rng.normal(0, .1, (table.shape[0], factors))))   # [b_u, p_u]
+    V = np.column_stack((b_i, rng.normal(0, .1, (table.shape[1], factors))))   # [b_i, q_i]
+    centred = np.where(mask, table - mu, 0.0)
+    noise_precision = 2.0                                                # 1 / (rating noise variance)
+    total = np.zeros(table.shape)
+    for step in range(burnin + samples):
+        centre_u, prec_u = _sample_prior(rng, U, user_f)
+        centre_v, prec_v = _sample_prior(rng, V, item_f)
+        U = _sample_side(rng, rated, centred - rated * V[:, 0], V, centre_u, prec_u, noise_precision)
+        V = _sample_side(rng, rated.T, centred.T - rated.T * U[:, 0], U, centre_v, prec_v, noise_precision)
+        pred = mu + U[:, :1] + V[:, 0][None, :] + U[:, 1:] @ V[:, 1:].T
+        errors = (table - pred)[mask]
+        noise_precision = rng.gamma(1 + errors.size / 2, 1 / (1 + 0.5 * errors @ errors))
+        if step >= burnin:                                               # skip warm-up samples
+            total += pred
+    return total / samples
+
+
+def bpmf(table, factors=20, chains=3, burnin=20, samples=80, seed=0, side_info=True):
+    """Bayesian MF averaged over `chains` independent runs (different random starts)."""
+    metadata = movie_metadata(table.shape[1]) if side_info else None
+    if side_info:
+        user_f, item_f = side_features(table, metadata)
+    else:
+        user_f, item_f = np.ones((table.shape[0], 1)), np.ones((table.shape[1], 1))
+    runs = [_bpmf_chain(table, factors, burnin, samples, seed + c, user_f, item_f) for c in range(chains)]
+    return clip(np.mean(runs, axis=0))
+
+
+# ---------------------------------------------------------------------------
+# 8. Blend: weighted average of several models
+# ---------------------------------------------------------------------------
+def blend(table, parts, weights):
+    """sum_k weights[k] * prediction of parts[k].
+
+    Weights are fitted by least squares on held-out ratings (platform_sim.py).
+    Models that make DIFFERENT mistakes partly cancel each other out.
+    """
+    return clip(sum(w * predict(table, part) for w, part in zip(weights, parts)))
+
+
+# ---------------------------------------------------------------------------
 MODELS = {
     'global_mean': global_mean,
     'user_mean': user_mean,
@@ -214,6 +373,8 @@ MODELS = {
     'bias': bias,
     'user_knn': user_knn,
     'als_mf': als_mf,
+    'bpmf': bpmf,
+    'blend': blend,
 }
 
 

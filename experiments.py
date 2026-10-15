@@ -5,7 +5,7 @@ Protocol (why: never choose settings by looking at the test score)
 2. For every method, try each setting in the grid: fit on "fit", score on "validation".
 3. Keep the best setting per method (by validation RMSE). This is now locked.
 4. Refit each locked method on ALL of ratings_train.npy, score once on ratings_test.npy.
-5. The overall best-on-validation method is written to best_config.json for generate.py.
+(The submitted model is chosen by platform_sim.py, at the platform's data density.)
 
 Metrics
 * RMSE: typical size of an error, in stars (lower is better). Main platform metric.
@@ -31,7 +31,10 @@ GRID = {
     'user_knn': [{'k': k, 'damping': d} for k in (10, 30, 100) for d in (0.0, 1.0, 3.0)],
     'als_mf': [{'factors': f, 'reg_bias': 3.0, 'reg_factor': r}
                for f in (8, 32) for r in (5.0, 10.0, 20.0)],
+    'bpmf_plain': [{'side_info': False}],
+    'bpmf_side': [{'side_info': True}],
 }
+ALIASES = {'bpmf_plain': 'bpmf', 'bpmf_side': 'bpmf'}   # two GRID rows, same function
 
 
 def rmse(predictions, truth):
@@ -81,7 +84,7 @@ def main():
     validation_rows, locked = [], {}
     for method, settings in GRID.items():
         for params in settings:
-            config = {'method': method, **params}
+            config = {'method': ALIASES.get(method, method), **params}
             predictions, seconds = timed(fit, config)
             score = rmse(predictions, validation)
             validation_rows.append({'config': json.dumps(config), 'validation_rmse': round(score, 4),
@@ -91,9 +94,6 @@ def main():
                 locked[method] = (score, config)
     save_csv(out / 'validation.csv', validation_rows)
 
-    best_score, best_config = min(locked.values(), key=lambda pair: pair[0])
-    Path('best_config.json').write_text(json.dumps(best_config, indent=2) + '\n')
-    print('\nChosen for generate.py:', best_config, f'(validation RMSE {best_score:.4f})\n')
 
     # Step 4: one final score per locked method on the supplied test set.
     test_rows, test_predictions = [], {}
