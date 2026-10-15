@@ -1,0 +1,6 @@
+{
+  "method": "als_mf",
+  "factors": 32,
+  "reg_bias": 3.0,
+  "reg_factor": 10.0
+}

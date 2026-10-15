@@ -1,0 +1,7 @@
+method,config,validation_rmse,test_rmse,test_exact_accuracy,seconds
+global_mean,"{""method"": ""global_mean""}",1.0162,1.0369,0.1289,0.0
+user_mean,"{""method"": ""user_mean""}",0.9378,0.9448,0.2171,0.01
+item_mean,"{""method"": ""item_mean""}",0.998,0.9996,0.2206,0.01
+bias,"{""method"": ""bias"", ""reg"": 3}",0.8825,0.8742,0.2448,0.18
+user_knn,"{""method"": ""user_knn"", ""k"": 30, ""damping"": 3.0}",0.8811,0.8715,0.2455,0.33
+als_mf,"{""method"": ""als_mf"", ""factors"": 32, ""reg_bias"": 3.0, ""reg_factor"": 10.0}",0.8804,0.8718,0.2461,1.6

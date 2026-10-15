@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+output.npy
+.venv/
+.DS_Store
+ratings_train.npy
+ratings_test.npy
+namesngenre.npy
