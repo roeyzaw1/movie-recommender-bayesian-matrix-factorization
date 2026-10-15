@@ -223,7 +223,7 @@ def als_mf(table, factors=32, reg_bias=3.0, reg_factor=10.0, epochs=15, seed=42)
 #     settings (Gibbs sampling) and averages their predictions. The amount of
 #     regularisation is also learned from the data instead of being tuned by hand.
 #
-# (b) Side-information prior (regression-based prior: Agarwal & Chen 2009, Park et al. 2013).
+# (b) Side-information prior (our addition, in the spirit of Porteous et al. 2010).
 #     Plain BPMF pulls every movie's (bias, dials) towards the same average movie.
 #     We pull each movie towards what its genres, release decade and popularity predict,
 #     and each user towards what their rating BEHAVIOUR predicts (which genres they chose
@@ -281,19 +281,42 @@ def _sample_wishart(rng, df, scale):
     return la @ la.T
 
 
-def _sample_prior(rng, vectors, features):
-    """Prior for each row's [bias, dials]:  centre = features @ W,  spread = precision matrix.
+def _sample_prior(rng, vectors, features, mode="plug_in"):
+    """Draw a Gaussian-prior precision, with optional sampling of feature coefficients.
 
-    W: ridge regression of the current vectors on the features ("what do genres predict?").
-    Precision: drawn from its posterior given how far vectors sit from their centres,
-    so the model itself decides how strongly to pull rare movies/users to the centre.
+    Prior model (when mode='sampled'):
+        precision ~ Wishart(df=d, scale=I)
+        W | precision ~ MatrixNormal(0, I_features, precision^-1)
+        vectors | W, precision ~ MatrixNormal(features @ W, I_rows, precision^-1).
+
+    Integrating W out gives the exact conditional posterior of the precision
+    given 'vectors'. We sample it, then sample W conditionally on that precision.
+    This is a valid blocked Gibbs update for (W, precision) given the vectors.
+
+    'plug_in' preserves the team's original approximation (ridge-estimate W
+    without sampling it). This mode reproduces the supplied historical results,
+    but must not be called fully Bayesian for W.
     """
+    if mode not in {"plug_in", "sampled"}:
+        raise ValueError("mode must be 'plug_in' or 'sampled'")
     d = vectors.shape[1]
-    W = np.linalg.solve(features.T @ features + np.eye(features.shape[1]), features.T @ vectors)
-    centre = features @ W
-    spread = vectors - centre
-    scale = np.linalg.inv(np.eye(d) + spread.T @ spread)
-    return centre, _sample_wishart(rng, d + len(vectors), (scale + scale.T) / 2)
+    nf = features.shape[1]
+    reg = features.T @ features + np.eye(nf)
+    fitted_W = np.linalg.solve(reg, features.T @ vectors)
+    errors = vectors - features @ fitted_W
+    scatter = errors.T @ errors
+    if mode == "sampled":
+        # The W prior contributes fitted_W.T @ fitted_W when W is marginalized.
+        scatter = scatter + fitted_W.T @ fitted_W
+    scale = np.linalg.inv(np.eye(d) + scatter)
+    precision = _sample_wishart(rng, d + len(vectors), (scale + scale.T) / 2)
+    W = fitted_W
+    if mode == "sampled":
+        z = rng.standard_normal((nf, d))
+        # Left covariance reg^-1, right covariance precision^-1.
+        left = np.linalg.solve(np.linalg.cholesky(reg).T, z)
+        W = fitted_W + np.linalg.solve(np.linalg.cholesky(precision).T, left.T).T
+    return features @ W, precision
 
 
 def _sample_side(rng, rated, targets, other, centre, precision, noise_precision):
@@ -317,7 +340,7 @@ def _sample_side(rng, rated, targets, other, centre, precision, noise_precision)
     return post_mean + np.linalg.solve(np.swapaxes(chol, 1, 2), z)[..., 0]
 
 
-def _bpmf_chain(table, factors, burnin, samples, seed, user_f, item_f):
+def _bpmf_chain(table, factors, burnin, samples, seed, user_f, item_f, prior_mode="plug_in"):
     """One Gibbs-sampling run; returns the average prediction over its kept samples."""
     mask = observed_mask(table)
     rated = mask.astype(float)
@@ -330,8 +353,8 @@ def _bpmf_chain(table, factors, burnin, samples, seed, user_f, item_f):
     noise_precision = 2.0                                                # 1 / (rating noise variance)
     total = np.zeros(table.shape)
     for step in range(burnin + samples):
-        centre_u, prec_u = _sample_prior(rng, U, user_f)
-        centre_v, prec_v = _sample_prior(rng, V, item_f)
+        centre_u, prec_u = _sample_prior(rng, U, user_f, mode=prior_mode)
+        centre_v, prec_v = _sample_prior(rng, V, item_f, mode=prior_mode)
         U = _sample_side(rng, rated, centred - rated * V[:, 0], V, centre_u, prec_u, noise_precision)
         V = _sample_side(rng, rated.T, centred.T - rated.T * U[:, 0], U, centre_v, prec_v, noise_precision)
         pred = mu + U[:, :1] + V[:, 0][None, :] + U[:, 1:] @ V[:, 1:].T
@@ -342,14 +365,20 @@ def _bpmf_chain(table, factors, burnin, samples, seed, user_f, item_f):
     return total / samples
 
 
-def bpmf(table, factors=20, chains=3, burnin=20, samples=80, seed=0, side_info=True):
-    """Bayesian MF averaged over `chains` independent runs (different random starts)."""
+def bpmf(table, factors=20, chains=3, burnin=20, samples=80, seed=0, side_info=True,
+         prior_mode="plug_in"):
+    """MF averaged over chains. prior_mode='sampled' samples W as well.
+
+    Default plug_in maintains compatibility with existing published local scores.
+    For a full conditional update of the feature coefficients, use 'sampled' and
+    re-evaluate rather than reusing previously tuned configs or reported scores.
+    """
     metadata = movie_metadata(table.shape[1]) if side_info else None
     if side_info:
         user_f, item_f = side_features(table, metadata)
     else:
         user_f, item_f = np.ones((table.shape[0], 1)), np.ones((table.shape[1], 1))
-    runs = [_bpmf_chain(table, factors, burnin, samples, seed + c, user_f, item_f) for c in range(chains)]
+    runs = [_bpmf_chain(table, factors, burnin, samples, seed + c, user_f, item_f, prior_mode) for c in range(chains)]
     return clip(np.mean(runs, axis=0))
 
 
@@ -362,6 +391,8 @@ def blend(table, parts, weights):
     Weights are fitted by least squares on held-out ratings (platform_sim.py).
     Models that make DIFFERENT mistakes partly cancel each other out.
     """
+    if len(parts) != len(weights) or not parts:
+        raise ValueError("blend requires matching, nonempty parts and weights")
     return clip(sum(w * predict(table, part) for w, part in zip(weights, parts)))
 
 

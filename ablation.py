@@ -1,6 +1,8 @@
 """Which side information helps BPMF?  Run:  python3 ablation.py  (~5 min)
 
-Same platform-density splits as platform_sim.py (seeds 1 and 2). Only the prior changes:
+Legacy exploratory platform-density splits (seeds 1 and 2). These splits
+overlap with the original team's model-selection data. These results are NOT
+an untouched final held-out evaluation. Only the prior changes:
   none            : every user/movie pulled to the same average (plain BPMF)
   movie metadata  : movies pulled to what genres + decade predict
   popularity      : users/movies pulled to what their number of ratings predicts

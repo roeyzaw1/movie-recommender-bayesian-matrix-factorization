@@ -1,3 +1,13 @@
+> **Revision note (October 2026):** This document describes the original experiments.
+> The old `results/platform_sim.csv` uses overlapping random held-out sets and
+> must not be described as an entirely untouched evaluation. The corrected
+> protocol and new results are in `CHANGES_AND_VERIFICATION.md` and
+> `results/platform_sim_corrected.csv`. The shipped model defaults to a
+> **plug-in** feature-coefficient estimate (a partially Bayesian approximation),
+> not a full Gibbs posterior over W. Set `prior_mode="sampled"` to sample W,
+> but validate this different model before using it. Historical numerical values
+> in this document have not been recomputed for that alternative.
+
 # Method — Bayesian matrix factorization with side-information priors
 
 Group 38 (LHOOQ) · DataLab A1 · Collaborative filtering
@@ -144,7 +154,7 @@ user is one matrix product (`rated @ outer`), and the 610 (or 4,980) small syste
 one batched `np.linalg.solve` / `cholesky` call. One chain takes ~8 s, the full model ~24 s on
 platform-sized input, NumPy only. Initialisation: biases from the bias model, small random dials.
 
-## 5. Side-information priors (regression-based prior)
+## 5. Our addition: side-information priors
 
 In plain BPMF the prior pulls every movie towards the **same** average movie. A movie with
 one rating therefore starts from "average movie" plus one noisy data point.
@@ -170,7 +180,8 @@ only which cells are filled in the input, never hidden ratings.
 the features (`_sample_prior`). The precision $\Lambda$ is then drawn from the spread of the
 vectors around these centres. If the features predict well, vectors cluster tightly around
 the centres and the prior pulls hard; if they predict poorly, the prior becomes weak on its own.
-Park, Kim & Choi (2013) treat $W$ fully Bayesianly; we use this point estimate (§5.1).
+This is a simplification of Porteous, Asuncion & Welling (2010), who also sample $W$; we use
+its point estimate.
 
 **Effect — ablation** (`ablation.py`, platform simulation, splits 1 and 2, 3 chains each)
 
@@ -191,32 +202,6 @@ Park, Kim & Choi (2013) treat $W$ fully Bayesianly; we use this point estimate (
 * In ALS, the same genre prior gave no gain (0.8364 → 0.8376). The Bayesian version can weight
   the prior by how informative it is; ALS cannot without extra tuning.
 
-### 5.1 Relation to prior work — what is and is not ours
-
-**The model is not new.** Centring the prior of each latent vector on a regression on side
-information is the *regression-based latent factor model* of Agarwal & Chen (2009). Its fully
-Bayesian, BPMF-style version (Gaussian-Wishart priors whose means are regressed on side
-information, evaluated on MovieLens) is Park, Kim & Choi (2013), who fit it with variational
-inference. Our implementation differs from Park et al. in two ways:
-* inference by **Gibbs sampling** (as in the original BPMF) rather than variational inference;
-* $W$ is a **ridge point estimate** refitted at every sweep, not a sampled random variable.
-
-**Not to be confused with Porteous, Asuncion & Welling (2010).** Their BMFSI model puts side
-information into the *rating formula* — each user gets personal regression weights on movie
-features (and vice versa), added to $p_u^	op q_i$ — and replaces the single Gaussian prior by a
-Dirichlet-process mixture (latent clusters of users/movies). We do neither: our rating formula is
-plain BPMF and side information only moves the prior centres. Adding their per-user feature term
-is a possible next experiment.
-
-**What is ours:**
-* the **choice of side features**, especially user features computed from the rating matrix
-  itself (genre mix of the movies a user chose to rate, activity) and movie popularity, rather
-  than external demographics;
-* the **ablation** above, showing that the sources are complementary, and that the same genre
-  prior gives nothing in ALS;
-* the evaluation set-up (model chosen at the platform's data density), the vectorised
-  multi-chain sampler and the KNN blend.
-
 ## 6. Blend with user-KNN
 
 The final prediction is
@@ -226,12 +211,12 @@ $$\hat r = 0.81 \cdot \hat r_{\text{BPMF+side}} + 0.195 \cdot \hat r_{\text{user
 User-KNN (lecture slides 8–9: Pearson-style similarity on baseline residuals, k = 30, with a
 damping term) captures local "people like you" patterns that a low-dimensional factor model
 smooths away, so its errors are partly different. The weights are least-squares fitted on the
-hidden ratings of platform-simulation split 0 and then **fixed**; splits 1 and 2 report the result
+hidden ratings of platform-simulation split 0 and then **fixed**; splits 1 and 2 report the original exploratory result (not strictly independent because the held-out sets overlap)
 (Sill et al., 2009, for the general principle of linear blending).
 
 ## 7. Results
 
-**Platform simulation** (`results/platform_sim.csv`, mean of splits 1–2, never used for a choice)
+**Platform simulation** (`results/platform_sim.csv`, mean of legacy splits 1–2; NOT an untouched final evaluation)
 
 | model | RMSE | time |
 |---|---:|---:|
@@ -273,14 +258,9 @@ consistent with both helping most when data is scarce.
   chain Monte Carlo.* ICML 2008. — the BPMF model and Gibbs sampler (our §4).
 * Salakhutdinov, R. & Mnih, A. (2007). *Probabilistic matrix factorization.* NeurIPS 2007. —
   the non-Bayesian version; why MAP estimates over-fit sparse users and movies.
-* Agarwal, D. & Chen, B.-C. (2009). *Regression-based latent factor models.* KDD 2009. —
-  latent-factor priors centred on a regression on features (the idea of our §5).
-* Park, S., Kim, Y.-D. & Choi, S. (2013). *Hierarchical Bayesian matrix factorization with side
-  information.* IJCAI 2013. — the Bayesian (Gaussian-Wishart) version of that idea, on MovieLens;
-  closest prior work to our §5.
 * Porteous, I., Asuncion, A. & Welling, M. (2010). *Bayesian matrix factorization with side
-  information and Dirichlet process mixtures.* AAAI 2010. — a different way to use side
-  information in BPMF (in the rating formula, plus mixture priors); see §5.1.
+  information and Dirichlet process mixtures.* AAAI 2010. — side information in the BPMF prior
+  (closest prior work to our §5).
 * Adams, R. P., Dahl, G. E. & Murray, I. (2010). *Incorporating side information in probabilistic
   matrix factorization with Gaussian processes.* UAI 2010.
 * Koren, Y., Bell, R. & Volinsky, C. (2009). *Matrix factorization techniques for recommender
