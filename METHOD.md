@@ -1,3 +1,5 @@
+> **METADATA CORRECTION — 20 OCT 2026:** The instructor corrected the movie-to-metadata alignment on 15 October. All numeric experiments and blend weights in this historical document were obtained with the OLD, misaligned `namesngenre.npy` and are **not valid evidence for the corrected model**. Do not copy these old results into the final report. See `METADATA_MIGRATION.md` for the updated workflow and new results. The mathematical model descriptions remain relevant.
+
 > **Revision note (October 2026):** This document describes the original experiments.
 > The old `results/platform_sim.csv` uses overlapping random held-out sets and
 > must not be described as an entirely untouched evaluation. The corrected
@@ -163,7 +165,7 @@ We centre each vector on what **side information** predicts instead:
 
 $$m_i = W_V^\top f_i \quad (\text{movies}),\qquad m_u = W_U^\top g_u \quad (\text{users})$$
 
-**Movie features $f_i$** (from `namesngenre.npy` and the input matrix)
+**Movie features $f_i$** (from the corrected `namesngenre2.npy` and the input matrix)
 * 20 genre indicators (`Comedy`, `Drama`, …, including `(no genres listed)`)
 * release decade (one-hot, parsed from the title, e.g. "Toy Story (1995)")
 * $\log(1 + \text{number of ratings})$ — popularity

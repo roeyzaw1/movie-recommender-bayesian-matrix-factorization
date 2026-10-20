@@ -231,20 +231,66 @@ def als_mf(table, factors=32, reg_bias=3.0, reg_factor=10.0, epochs=15, seed=42)
 #     "a typical 1990s comedy" instead of from nothing.
 
 
-def movie_metadata(n_movies):
-    """Genres + release decade for each movie, from namesngenre.npy (or None if unavailable)."""
-    path = Path(__file__).with_name('namesngenre.npy')
-    if not path.exists():
+# Instructor's 15 Oct 2026 corrected MovieLens metadata (610 users x 4980 movies).
+# Hash checks prevent accidentally renaming the *old*, misaligned data to this filename.
+METADATA_FILENAME = 'namesngenre2.npy'
+MOVIE_IDS_FILENAME = 'movie_ids.npy'
+EXPECTED_MOVIES = 4980
+METADATA_SHA256 = 'a7453a2a52bccf18b079b0eae30eaa736799995bc1ddeb3f2d13b96cff201cac'
+MOVIE_IDS_SHA256 = 'd1daa80573bc19a3ca4394f318351f1ed8881288496341d3ce14e8d2b4c555fe'
+
+
+def _check_corrected_metadata(n_movies):
+    """Load official metadata only if file, ID order and contents are verified.
+
+    For tiny synthetic smoke-test matrices, no movie metadata is available;
+    the BPMF code still tests its remaining priors on those matrices.
+    """
+    if n_movies != EXPECTED_MOVIES:
         return None
-    meta = np.load(path, allow_pickle=True)
-    if len(meta) != n_movies:                       # file does not match this matrix
+
+    import hashlib
+
+    root = Path(__file__).resolve().parent
+    for filename, digest in ((METADATA_FILENAME, METADATA_SHA256),
+                             (MOVIE_IDS_FILENAME, MOVIE_IDS_SHA256)):
+        path = root / filename
+        if not path.exists():
+            raise FileNotFoundError(
+                f'Missing {filename}: extract the instructor\'s corrected A1 ZIP '
+                'and commit namesngenre2.npy and movie_ids.npy alongside models.py.')
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != digest:
+            raise ValueError(
+                f'{filename} differs from the corrected 15 Oct 2026 course file. '
+                'Do not rename namesngenre.npy to namesngenre2.npy; use the real corrected file.')
+
+    meta = np.load(root / METADATA_FILENAME, allow_pickle=False)
+    ids = np.load(root / MOVIE_IDS_FILENAME, allow_pickle=False)
+    if meta.shape != (n_movies, 2):
+        raise ValueError(f'{METADATA_FILENAME} expected shape {(n_movies, 2)}, got {meta.shape}')
+    if ids.shape != (n_movies,) or not np.issubdtype(ids.dtype, np.integer):
+        raise ValueError(f'{MOVIE_IDS_FILENAME} must be a length-{n_movies} integer vector')
+    if np.any(ids <= 0) or len(np.unique(ids)) != n_movies:
+        raise ValueError('movie_ids.npy must contain a unique positive MovieLens movieId per column')
+    return meta
+
+
+def movie_metadata(n_movies):
+    """Genre + release-year-bin features aligned to rating columns by movieId.
+
+    Position j in namesngenre2.npy and movie_ids.npy describes ratings[:, j].
+    Never use movie titles to join or deduplicate entries (titles need not be unique).
+    """
+    meta = _check_corrected_metadata(n_movies)
+    if meta is None:
         return None
     genre_lists = [str(g).split('|') for g in meta[:, 1]]
     names = sorted({g for gs in genre_lists for g in gs})
     genres = np.array([[name in gs for name in names] for gs in genre_lists], float)
     years = []
     for title in meta[:, 0]:
-        found = re.search(r'\((\d{4})\)\s*$', str(title).strip())   # "Toy Story (1995)" -> 1995
+        found = re.search(r'\((\d{4})\)\s*$', str(title).strip())
         years.append(float(found.group(1)) if found else np.nan)
     years = np.array(years)
     years[np.isnan(years)] = np.nanmedian(years)

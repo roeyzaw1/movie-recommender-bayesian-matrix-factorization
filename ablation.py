@@ -8,13 +8,14 @@ an untouched final held-out evaluation. Only the prior changes:
   popularity      : users/movies pulled to what their number of ratings predicts
   user behaviour  : users pulled to what the genre mix of their rated movies predicts
   all             : everything (the submitted model)
-Output: results/ablation.csv
+Output: results/ablation_corrected.csv
 """
 import csv
 
 import numpy as np
 from models import _bpmf_chain, clip, movie_metadata, observed_mask
-from platform_sim import merged_split, rmse
+from experiments import split_observed
+from platform_sim import rmse
 
 
 def features(table, use):
@@ -43,13 +44,15 @@ if __name__ == '__main__':
     merged = np.where(np.isfinite(t := np.load('ratings_train.npy')), t, np.load('ratings_test.npy'))
     rows = []
     for seed in (1, 2):
-        fit, hidden = merged_split(merged, seed)
+        fit, hidden = split_observed(merged, fraction=0.2, seed=seed)
         for name, use in VARIANTS.items():
             uf, itf = features(fit, use)
             runs = [_bpmf_chain(fit, 20, 20, 80, c, uf, itf) for c in range(3)]
             rows.append({'split': seed, 'prior': name, 'rmse': round(rmse(clip(np.mean(runs, 0)), hidden), 4)})
             print(rows[-1], flush=True)
-    with open('results/ablation.csv', 'w', newline='') as f:
+    from pathlib import Path
+    Path('results').mkdir(exist_ok=True)
+    with open('results/ablation_corrected.csv', 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)

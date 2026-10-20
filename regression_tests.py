@@ -5,11 +5,25 @@ No ratings files are needed for these checks.
 """
 import unittest
 import numpy as np
-from models import _sample_prior, predict
+from models import _sample_prior, predict, movie_metadata, EXPECTED_MOVIES
 from platform_sim import three_way_split, fit_simplex_blend
 
 
 class Tests(unittest.TestCase):
+    def test_official_metadata_alignment(self):
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parent
+        meta = np.load(root / 'namesngenre2.npy', allow_pickle=False)
+        ids = np.load(root / 'movie_ids.npy', allow_pickle=False)
+        self.assertEqual(meta.shape, (EXPECTED_MOVIES, 2))
+        self.assertEqual(len(set(map(int, ids))), EXPECTED_MOVIES)
+        self.assertEqual(int(ids[0]), 1)
+        self.assertEqual(meta[0, 0], 'Toy Story (1995)')
+        features = movie_metadata(EXPECTED_MOVIES)
+        self.assertEqual(features.shape[0], EXPECTED_MOVIES)
+        self.assertTrue(np.isfinite(features).all())
+
+
     def test_disjoint_three_way_partition(self):
         data = np.full((19, 23), np.nan)
         data.flat[np.arange(350)[::3]] = (np.arange(len(np.arange(350)[::3])) % 10 + 1) / 2
