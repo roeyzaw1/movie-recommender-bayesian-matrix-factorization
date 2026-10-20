@@ -1,0 +1,11 @@
+split,prior,rmse
+1,none,0.84
+1,movie metadata,0.8192
+1,popularity,0.8373
+1,user behaviour,0.8386
+1,all,0.816
+2,none,0.8411
+2,movie metadata,0.8183
+2,popularity,0.8372
+2,user behaviour,0.8406
+2,all,0.8143
