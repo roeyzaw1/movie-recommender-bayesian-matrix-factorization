@@ -1,3 +1,5 @@
+> **METADATA CORRECTION — 20 OCT 2026:** The instructor corrected the movie-to-metadata alignment on 15 October. All numeric experiments and blend weights in this historical document were obtained with the OLD, misaligned `namesngenre.npy` and are **not valid evidence for the corrected model**. Do not copy these old results into the final report. See `METADATA_MIGRATION.md` for the updated workflow and new results. The mathematical model descriptions remain relevant.
+
 # Group 38: corrections and verification
 
 This revision preserves the original implementation and old CSVs for reproducibility.

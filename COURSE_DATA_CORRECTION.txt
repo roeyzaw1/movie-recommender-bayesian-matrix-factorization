@@ -1,0 +1,21 @@
+DataLab A1 datasets - metadata correction, 15 October 2026
+
+ratings_train.npy and ratings_test.npy are unchanged.
+namesngenre2.npy contains the corrected movie titles and genres. Row j describes
+column j of the ratings matrices. Replace your previous metadata file with this
+version, and update your loading code to use namesngenre2.npy (or rename this
+corrected file locally if your code expects namesngenre.npy).
+
+movie_ids.npy contains the original MovieLens movieId for each ratings column.
+movie_ids[j], namesngenre2[j] and ratings[:, j] describe the same movie.
+Use movieId when comparing against the original MovieLens data: titles are not
+unique. In particular, War of the Worlds (2005), Emma (1996), Confessions of a
+Dangerous Mind (2002) and Saturn 3 (1980) each have two different movieIds.
+
+The previous metadata file used positional indices from two lists of different
+lengths (movies with ratings versus all movies). The original NPY remains
+available separately for reference; it is not included in this updated ZIP.
+
+Original data source: GroupLens MovieLens Latest Small (September 2018).
+https://grouplens.org/datasets/movielens/latest/
+Please retain the source's README and comply with its data use conditions.

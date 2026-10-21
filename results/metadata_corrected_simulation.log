@@ -1,0 +1,14 @@
+fit 40446
+calibration 10111
+evaluation 12639
+calibrate bpmf_side
+calibrate user_knn
+Frozen weights {'bpmf_side': 1.0, 'user_knn': 0.0}
+{'model': 'bias', 'eval_rmse': 0.85996, 'seconds': 0.29}
+{'model': 'user_knn', 'eval_rmse': 0.85194, 'seconds': 1.0}
+{'model': 'als_mf', 'eval_rmse': 0.85038, 'seconds': 2.89}
+{'model': 'bpmf_plain', 'eval_rmse': 0.83915, 'seconds': 100.21}
+{'model': 'bpmf_side', 'eval_rmse': 0.81513, 'seconds': 120.01}
+{'model': 'blend', 'eval_rmse': 0.81513, 'seconds': ''}
+Results saved: results/platform_sim_corrected.csv
+Updated best_config.json (new blend weights)

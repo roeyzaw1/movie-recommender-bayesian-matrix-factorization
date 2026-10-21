@@ -1,0 +1,28 @@
+{'split': 0, 'model': 'bias', 'rmse': 0.8451, 'seconds': 0.2}
+{'split': 0, 'model': 'user_knn', 'rmse': 0.8365, 'seconds': 0.5}
+{'split': 0, 'model': 'als_mf', 'rmse': 0.8364, 'seconds': 1.6}
+{'split': 0, 'model': 'bpmf_plain', 'rmse': 0.8246, 'seconds': 23.3}
+{'split': 0, 'model': 'bpmf_side', 'rmse': 0.8183, 'seconds': 23.2}
+blend weights {'bpmf_side': np.float64(0.81), 'user_knn': np.float64(0.195)}
+{'split': 1, 'model': 'bias', 'rmse': 0.8555, 'seconds': 0.2}
+{'split': 1, 'model': 'user_knn', 'rmse': 0.8487, 'seconds': 0.4}
+{'split': 1, 'model': 'als_mf', 'rmse': 0.8459, 'seconds': 1.6}
+{'split': 1, 'model': 'bpmf_plain', 'rmse': 0.84, 'seconds': 24.3}
+{'split': 1, 'model': 'bpmf_side', 'rmse': 0.8351, 'seconds': 23.9}
+{'split': 1, 'model': 'blend', 'rmse': 0.8324, 'seconds': ''}
+{'split': 2, 'model': 'bias', 'rmse': 0.8568, 'seconds': 0.2}
+{'split': 2, 'model': 'user_knn', 'rmse': 0.8494, 'seconds': 0.5}
+{'split': 2, 'model': 'als_mf', 'rmse': 0.85, 'seconds': 1.6}
+{'split': 2, 'model': 'bpmf_plain', 'rmse': 0.8411, 'seconds': 23.3}
+{'split': 2, 'model': 'bpmf_side', 'rmse': 0.8326, 'seconds': 23.2}
+{'split': 2, 'model': 'blend', 'rmse': 0.8311, 'seconds': ''}
+
+Mean RMSE on splits 1-2 (never used for any choice):
+  bias        0.8561
+  user_knn    0.8491
+  als_mf      0.8479
+  bpmf_plain  0.8405
+  bpmf_side   0.8338
+  blend       0.8317
+
+best_config.json -> {'method': 'blend', 'parts': [{'method': 'bpmf', 'side_info': True}, {'method': 'user_knn', 'k': 30, 'damping': 3.0}], 'weights': [0.81, 0.195]}

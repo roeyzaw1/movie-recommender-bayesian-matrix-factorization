@@ -1,0 +1,7 @@
+model,eval_rmse,seconds
+bias,0.85996,0.29
+user_knn,0.85194,0.99
+als_mf,0.85038,2.67
+bpmf_plain,0.83915,75.25
+bpmf_side,0.83352,76.14
+blend,0.83274,
