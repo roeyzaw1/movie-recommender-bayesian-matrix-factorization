@@ -1,3 +1,47 @@
+# Movie-rating prediction with Bayesian matrix factorisation
+
+*Master IASD (Université Paris Dauphine-PSL), Data Science Lab, assignment A1.
+Group project: Roey Zaworbach, [Maryam Shiran](https://github.com/MaryamShiran) and
+[MohammadMahdi1128](https://github.com/MohammadMahdi1128).*
+
+## The problem
+
+610 users and 4,980 movies form a table of ratings from 0.5 to 5, and only about 1% of
+it is filled in. The task is to predict the missing ratings, i.e. to guess how
+much a user would like a movie they haven't rated. Predictions are scored with **RMSE**,
+the typical size of the error in stars (lower is better), on ratings hidden by the course.
+
+## What we did
+
+1. **Simple baselines:** the global average, user and movie averages with biases,
+   user-to-user nearest neighbours (KNN) and alternating least squares (ALS).
+2. **Bayesian probabilistic matrix factorisation (BPMF):** each user and each movie is
+   described by 20 hidden "taste" numbers, and a rating is roughly the match between
+   the two. Instead of fitting one best answer, the model samples many plausible answers
+   (Gibbs sampling) and averages them, which makes it much harder to overfit such a sparse table.
+3. **Side information in the prior:** most movies have only a handful of ratings, so we
+   also use what we know about each movie (genres, decade, popularity) and each user
+   (genre mix, activity) to give the model a sensible starting guess for their hidden
+   numbers. A movie with 2 ratings then borrows strength from similar movies. This idea
+   follows Agarwal & Chen (2009) and Park et al. (2013).
+
+## Results
+
+| Model | RMSE (local held-out split) |
+|---|---:|
+| Movie/user bias | 0.860 |
+| User KNN | 0.852 |
+| ALS | 0.850 |
+| Plain BPMF | 0.839 |
+| **BPMF + side information** | **0.815** |
+
+On the course's own hidden test set our submission scored **0.806 RMSE**.
+The details are in [METHOD.md](METHOD.md), [report.pdf](report.pdf) and [slides.pdf](slides.pdf).
+
+---
+
+*The original course README follows.*
+
 # DataLab A1 — Group 38 (LHOOQ), corrected metadata edition
 
 **Independent code audit (20 October 2026):** See `AUDIT_REPORT.md`. One broken import in the ablation script has been repaired. The original BPMF prediction model and best configuration were left unchanged. Run `python3 -m unittest -v regression_tests.py audit_regression_tests.py` for both original and supplemental tests. With the instructor data, the independently checked train-to-test RMSE is **0.83923**; this is a different evaluation protocol from the corrected platform-density simulation.
